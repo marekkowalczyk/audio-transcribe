@@ -3,6 +3,8 @@
 import sys
 import os
 import openai
+import argparse
+import logging
 from read_yaml import get_api_key_value
 
 # List of supported audio file formats
@@ -29,41 +31,37 @@ def create_transcript_file(input_file_path):
     Returns:
         None.
     """
-    # Get the base file name without extension
     base_file_name = os.path.splitext(os.path.basename(input_file_path))[0]
-    # Construct the output file path
     output_file_path = f"{base_file_name}-transcript.txt"
 
-    # Check if the output file already exists
     if os.path.exists(output_file_path):
-        print(f"Output file '{output_file_path}' already exists. Aborting.")
+        logging.warning(f"Output file '{output_file_path}' already exists. Aborting.")
         return
 
     try:
-        # Open the input file in binary mode
-        audio_file = open(input_file_path, "rb")
+        with open(input_file_path, "rb") as audio_file:
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
     except FileNotFoundError:
-        # Print error message and return if input file does not exist
-        print(f"Input file '{input_file_path}' not found. Aborting.")
+        logging.error(f"Input file '{input_file_path}' not found. Aborting.")
         return
-
-    try:
-        # Transcribe the audio using the OpenAI API
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
     except Exception as e:
-        # Print error message and return if API call fails
-        print(f"Error during API call: {e}")
+        logging.error(f"Error during API call: {e}")
         return
 
     try:
-        # Save the transcript to a file with the same name as the input file
         with open(output_file_path, "w") as output_file:
             output_file.write(transcript["text"])
-        print(f"Transcription successfully created and saved to '{output_file_path}'.")
+        logging.info(f"Transcription successfully created and saved to '{output_file_path}'.")
     except Exception as e:
-        # Print error message and return if output file write fails
-        print(f"Error writing output file: {e}")
+        logging.error(f"Error writing output file: {e}")
         return
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Transcribe audio files using OpenAI API.")
+    parser.add_argument("input_file_path", help="Path to the input audio file.")
+    return parser.parse_args()
 
 
 def main():
@@ -76,30 +74,21 @@ def main():
     Returns:
         None.
     """
-    # Check if there is exactly one command line argument
-    if len(sys.argv) != 2:
-        print(f"Please provide a single audio file as a command-line argument.\nSupported formats are: {', '.join(SUPPORTED_FORMATS)}.")
-        return
+    args = parse_args()
+    input_file_path = args.input_file_path
 
-    input_file_path = sys.argv[1]
-
-    # Check if the input file exists and is a regular file
     if not is_valid_file(input_file_path):
-        print(f"Input file '{input_file_path}' does not exist or is not a file. Please provide a valid filename.")
+        logging.error(f"Input file '{input_file_path}' does not exist or is not a file. Please provide a valid filename.")
         return
 
-    # Check if the input file is of a supported audio format
     if not is_supported_format(input_file_path):
-        print(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
+        logging.error(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
         return
 
-    # Transcribe the audio file and save the transcript to a file
     create_transcript_file(input_file_path)
 
 
 if __name__ == "__main__":
-    # Set the OpenAI API key from the read_yaml module
+    logging.basicConfig(level=logging.INFO)
     openai.api_key = get_api_key_value('whisper_01')
-
-    # Call the main function
     main()
