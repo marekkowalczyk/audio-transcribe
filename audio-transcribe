@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import openai
+from read_yaml import get_api_key_value
+
+openai.api_key = get_api_key_value('whisper_01')
+
+supported_formats = ['m4a', 'mp3', 'webm', 'mp4', 'mpga', 'wav', 'mpeg']
+
+if len(sys.argv) > 1:
+    input_file_path = sys.argv[1]
+
+    # Get the file extension
+    file_extension = os.path.splitext(input_file_path)[1].lstrip('.')
+
+    if file_extension.lower() in supported_formats:
+        # Get the base file name without extension
+        base_file_name = os.path.splitext(os.path.basename(input_file_path))[0]
+
+        output_file_path = f"{base_file_name}-transcript.txt"
+
+        if not os.path.exists(output_file_path):
+            try:
+                audio_file = open(input_file_path, "rb")
+            except FileNotFoundError:
+                print(f"Input file '{input_file_path}' not found. Aborting.")
+                sys.exit(1)
+
+            try:
+                transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            except Exception as e:
+                print(f"Error during API call: {e}")
+                sys.exit(1)
+
+            try:
+                # Save the transcript to a file with the same name as the input file
+                with open(output_file_path, "w") as output_file:
+                    output_file.write(transcript["text"])
+                print(f"Transcription successfully created and saved to '{output_file_path}'.")
+            except Exception as e:
+                print(f"Error writing output file: {e}")
+                sys.exit(1)
+        else:
+            print(f"Output file '{output_file_path}' already exists. Aborting.")
+    else:
+        print(f"Unsupported file format '{file_extension}'. Supported formats are: {', '.join(supported_formats)}.")
+else:
+    print(f"Please provide an audio file as a command-line argument.\nSupported formats are: {', '.join(supported_formats)}.")
