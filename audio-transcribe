@@ -5,46 +5,101 @@ import os
 import openai
 from read_yaml import get_api_key_value
 
-openai.api_key = get_api_key_value('whisper_01')
+# List of supported audio file formats
+SUPPORTED_FORMATS = ['m4a', 'mp3', 'webm', 'mp4', 'mpga', 'wav', 'mpeg']
 
-supported_formats = ['m4a', 'mp3', 'webm', 'mp4', 'mpga', 'wav', 'mpeg']
 
-if len(sys.argv) > 1:
+def is_valid_file(file_path):
+    """Checks if a file exists and is a regular file."""
+    return os.path.isfile(file_path)
+
+
+def is_supported_format(file_path):
+    """Checks if a file is of a supported audio format."""
+    return os.path.splitext(file_path)[1].lstrip('.').lower() in SUPPORTED_FORMATS
+
+
+def create_transcript_file(input_file_path):
+    """
+    Transcribes an audio file and saves the transcript to a file.
+
+    Args:
+        input_file_path (str): The path to the input audio file.
+
+    Returns:
+        None.
+    """
+    # Get the base file name without extension
+    base_file_name = os.path.splitext(os.path.basename(input_file_path))[0]
+    # Construct the output file path
+    output_file_path = f"{base_file_name}-transcript.txt"
+
+    # Check if the output file already exists
+    if os.path.exists(output_file_path):
+        print(f"Output file '{output_file_path}' already exists. Aborting.")
+        return
+
+    try:
+        # Open the input file in binary mode
+        audio_file = open(input_file_path, "rb")
+    except FileNotFoundError:
+        # Print error message and return if input file does not exist
+        print(f"Input file '{input_file_path}' not found. Aborting.")
+        return
+
+    try:
+        # Transcribe the audio using the OpenAI API
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+    except Exception as e:
+        # Print error message and return if API call fails
+        print(f"Error during API call: {e}")
+        return
+
+    try:
+        # Save the transcript to a file with the same name as the input file
+        with open(output_file_path, "w") as output_file:
+            output_file.write(transcript["text"])
+        print(f"Transcription successfully created and saved to '{output_file_path}'.")
+    except Exception as e:
+        # Print error message and return if output file write fails
+        print(f"Error writing output file: {e}")
+        return
+
+
+def main():
+    """
+    Main function that processes command line arguments.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    # Check if there is exactly one command line argument
+    if len(sys.argv) != 2:
+        print(f"Please provide a single audio file as a command-line argument.\nSupported formats are: {', '.join(SUPPORTED_FORMATS)}.")
+        return
+
     input_file_path = sys.argv[1]
 
-    # Get the file extension
-    file_extension = os.path.splitext(input_file_path)[1].lstrip('.')
+    # Check if the input file exists and is a regular file
+    if not is_valid_file(input_file_path):
+        print(f"Input file '{input_file_path}' does not exist or is not a file. Please provide a valid filename.")
+        return
 
-    if file_extension.lower() in supported_formats:
-        # Get the base file name without extension
-        base_file_name = os.path.splitext(os.path.basename(input_file_path))[0]
+    # Check if the input file is of a supported audio format
+    if not is_supported_format(input_file_path):
+        print(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
+        return
 
-        output_file_path = f"{base_file_name}-transcript.txt"
+    # Transcribe the audio file and save the transcript to a file
+    create_transcript_file(input_file_path)
 
-        if not os.path.exists(output_file_path):
-            try:
-                audio_file = open(input_file_path, "rb")
-            except FileNotFoundError:
-                print(f"Input file '{input_file_path}' not found. Aborting.")
-                sys.exit(1)
 
-            try:
-                transcript = openai.Audio.transcribe("whisper-1", audio_file)
-            except Exception as e:
-                print(f"Error during API call: {e}")
-                sys.exit(1)
+if __name__ == "__main__":
+    # Set the OpenAI API key from the read_yaml module
+    openai.api_key = get_api_key_value('whisper_01')
 
-            try:
-                # Save the transcript to a file with the same name as the input file
-                with open(output_file_path, "w") as output_file:
-                    output_file.write(transcript["text"])
-                print(f"Transcription successfully created and saved to '{output_file_path}'.")
-            except Exception as e:
-                print(f"Error writing output file: {e}")
-                sys.exit(1)
-        else:
-            print(f"Output file '{output_file_path}' already exists. Aborting.")
-    else:
-        print(f"Unsupported file format '{file_extension}'. Supported formats are: {', '.join(supported_formats)}.")
-else:
-    print(f"Please provide an audio file as a command-line argument.\nSupported formats are: {', '.join(supported_formats)}.")
+    # Call the main function
+    main()
