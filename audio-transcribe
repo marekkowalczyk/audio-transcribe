@@ -10,16 +10,13 @@ from read_yaml import get_api_key_value
 # List of supported audio file formats
 SUPPORTED_FORMATS = ['m4a', 'mp3', 'webm', 'mp4', 'mpga', 'wav', 'mpeg']
 
-
 def is_valid_file(file_path):
     """Checks if a file exists and is a regular file."""
     return os.path.isfile(file_path)
 
-
 def is_supported_format(file_path):
     """Checks if a file is of a supported audio format."""
     return os.path.splitext(file_path)[1].lstrip('.').lower() in SUPPORTED_FORMATS
-
 
 def create_transcript_file(input_file_path):
     """
@@ -31,38 +28,79 @@ def create_transcript_file(input_file_path):
     Returns:
         None.
     """
-    base_file_name = os.path.splitext(os.path.basename(input_file_path))[0]
-    output_file_path = f"{base_file_name}-transcript.txt"
+    # Get the base file name and extension
+    base_file_name, file_extension = os.path.splitext(os.path.basename(input_file_path))
+    # Construct the output file path
+    output_file_path = f"{base_file_name}-{file_extension.lstrip('.')}-transcript.txt"
 
+    # Check if the output file already exists
     if os.path.exists(output_file_path):
-        logging.warning(f"Output file '{output_file_path}' already exists. Aborting.")
+        print(f"Output file '{output_file_path}' already exists. Aborting.")
         return
 
     try:
-        with open(input_file_path, "rb") as audio_file:
-            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        # Open the input file in binary mode
+        audio_file = open(input_file_path, "rb")
     except FileNotFoundError:
-        logging.error(f"Input file '{input_file_path}' not found. Aborting.")
-        return
-    except Exception as e:
-        logging.error(f"Error during API call: {e}")
+        # Print error message and return if input file does not exist
+        print(f"Input file '{input_file_path}' not found. Aborting.")
         return
 
     try:
+        # Transcribe the audio using the OpenAI API
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+    except Exception as e:
+        # Print error message and return if API call fails
+        print(f"Error during API call: {e}")
+        return
+
+    try:
+        # Save the transcript to a file with the new name format
         with open(output_file_path, "w") as output_file:
             output_file.write(transcript["text"])
-        logging.info(f"Transcription successfully created and saved to '{output_file_path}'.")
+        print(f"Transcription successfully created and saved to '{output_file_path}'.")
     except Exception as e:
-        logging.error(f"Error writing output file: {e}")
+        # Print error message and return if output file write fails
+        print(f"Error writing output file: {e}")
         return
 
+def process_directory(directory_path, recursive):
+    """
+    Process all supported audio files within the given directory.
+
+    Args:
+        directory_path (str): The path to the directory containing audio files.
+        recursive (bool): Whether to process files in subdirectories.
+
+    Returns:
+        None.
+    """
+    if not os.path.isdir(directory_path):
+        logging.error(f"Directory '{directory_path}' does not exist or is not a directory. Please provide a valid directory.")
+        return
+
+    if recursive:
+        for root, dirs, files in os.walk(directory_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if is_supported_format(file_path):
+                    logging.info(f"Processing file: {file_path}")
+                    create_transcript_file(file_path)
+    else:
+        for file in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, file)
+            if os.path.isfile(file_path) and is_supported_format(file_path):
+                logging.info(f"Processing file: {file_path}")
+                create_transcript_file(file_path)
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Transcribe audio files using OpenAI API.")
-    parser.add_argument("input_file_path", help="Path to the input audio file.")
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("-f", "--file", dest="input_file_path", help="Path to the input audio file.")
+    input_group.add_argument("-d", "--directory", dest="input_directory_path", help="Path to the directory containing audio files.")
+    parser.add_argument("-r", "--recursive", action="store_true", help="Enable recursion for processing audio files in subdirectories.")
     return parser.parse_args()
-
 
 def main():
     """
@@ -75,18 +113,23 @@ def main():
         None.
     """
     args = parse_args()
-    input_file_path = args.input_file_path
+    
+    if args.input_file_path:
+        input_file_path = args.input_file_path
 
-    if not is_valid_file(input_file_path):
-        logging.error(f"Input file '{input_file_path}' does not exist or is not a file. Please provide a valid filename.")
-        return
+        if not is_valid_file(input_file_path):
+            logging.error(f"Input file '{input_file_path}' does not exist or is not a file. Please provide a valid filename.")
+            return
 
-    if not is_supported_format(input_file_path):
-        logging.error(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
-        return
+        if not is_supported_format(input_file_path):
+            logging.error(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
+            return
 
-    create_transcript_file(input_file_path)
-
+        create_transcript_file(input_file_path)
+    
+    if args.input_directory_path:
+        input_directory_path = args.input_directory_path
+        process_directory(input_directory_path, args.recursive)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
