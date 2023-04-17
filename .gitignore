@@ -1,6 +1,17 @@
 # MKO
 old/
-config/keys.yaml
+config/
+*test*
+*.txt
+
+# Audio files
+*.m4a
+*.mp3
+*.webm
+*.mp4
+*.mpga
+*.wav
+*.mpeg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
