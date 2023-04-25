@@ -19,7 +19,7 @@ def is_supported_format(file_path):
     """Checks if a file is of a supported audio format."""
     return os.path.splitext(file_path)[1].lstrip('.').lower() in SUPPORTED_FORMATS
 
-def create_transcript_file(input_file_path):
+def create_transcript_file(input_file_path, language):
     """
     Transcribes an audio file and saves the transcript to a file.
 
@@ -49,7 +49,12 @@ def create_transcript_file(input_file_path):
 
     try:
         # Transcribe the audio using the OpenAI API
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        transcript = openai.Audio.transcribe(
+            file=audio_file,
+            model="whisper-1",
+            response_format="text",
+            language=language
+        )
     except Exception as e:
         # Print error message and return if API call fails
         print(f"Error during API call: {e}")
@@ -58,14 +63,14 @@ def create_transcript_file(input_file_path):
     try:
         # Save the transcript to a file with the new name format
         with open(output_file_path, "w") as output_file:
-            output_file.write(transcript["text"])
+            output_file.write(transcript)
         print(f"Transcription successfully created and saved to '{output_file_path}'.")
     except Exception as e:
         # Print error message and return if output file write fails
         print(f"Error writing output file: {e}")
         return
 
-def process_directory(directory_path, recursive):
+def process_directory(directory_path, recursive, language):
     """
     Process all supported audio files within the given directory.
 
@@ -85,8 +90,8 @@ def process_directory(directory_path, recursive):
             for file in files:
                 file_path = os.path.join(root, file)
                 if is_supported_format(file_path):
-                    logging.info(f"Processing file: {file_path}")
-                    create_transcript_file(file_path)
+                    logging.info(f"Processing file: {file_path}, {language}")
+                    create_transcript_file(file_path, language)
     else:
         for file in os.listdir(directory_path):
             file_path = os.path.join(directory_path, file)
@@ -101,6 +106,7 @@ def parse_args():
     input_group.add_argument("-f", "--file", dest="input_file_path", help="Path to the input audio file.")
     input_group.add_argument("-d", "--directory", dest="input_directory_path", help="Path to the directory containing audio files.")
     parser.add_argument("-r", "--recursive", action="store_true", help="Enable recursion for processing audio files in subdirectories.")
+    parser.add_argument("-l", "--language", dest="language", default="pl", help="The two-letter language code for the transcription. Default is 'pl' for Polish.")
     return parser.parse_args()
 
 def main():
@@ -114,6 +120,10 @@ def main():
         None.
     """
     args = parse_args()
+    language = args.language
+    
+    if not any(arg.startswith(("--language", "-l")) for arg in sys.argv):
+        print("No language specified, using the default language: Polish (pl).")
     
     if args.input_file_path:
         input_file_path = args.input_file_path
@@ -126,11 +136,11 @@ def main():
             logging.error(f"Unsupported file format for file '{input_file_path}'. Supported formats are: {', '.join(SUPPORTED_FORMATS)}.")
             return
 
-        create_transcript_file(input_file_path)
+        create_transcript_file(input_file_path, language)
     
     if args.input_directory_path:
         input_directory_path = args.input_directory_path
-        process_directory(input_directory_path, args.recursive)
+        process_directory(input_directory_path, args.recursive, language)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
