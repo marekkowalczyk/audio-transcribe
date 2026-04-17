@@ -1,12 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 
-# TODO Handling glob patterns
+# 2026-04-17
 
 import sys
 import os
 import openai
 import argparse
 import logging
+from pathlib import Path
 
 # List of supported audio file formats
 SUPPORTED_FORMATS = ['m4a', 'mp3', 'webm', 'mp4', 'mpga', 'wav', 'mpeg']
@@ -17,7 +18,7 @@ def is_valid_file(file_path):
 
 def is_supported_format(file_path):
     """Checks if a file is of a supported audio format."""
-    return os.path.splitext(file_path)[1].lstrip('.').lower() in SUPPORTED_FORMATS
+    return Path(file_path).suffix.lstrip('.').lower() in SUPPORTED_FORMATS
 
 def create_transcript_file(input_file_path, language):
     """
@@ -25,36 +26,37 @@ def create_transcript_file(input_file_path, language):
 
     Args:
         input_file_path (str): The path to the input audio file.
+        language (str): The language code for transcription.
 
     Returns:
         None.
     """
     # Get the base file name and extension
-    base_file_name, file_extension = os.path.splitext(os.path.basename(input_file_path))
+    base_file_name = Path(input_file_path).stem
+    file_extension = Path(input_file_path).suffix
     # Construct the output file path
     output_file_path = f"{base_file_name}-{file_extension.lstrip('.')}-transcript.txt"
 
     # Check if the output file already exists
-    if os.path.exists(output_file_path):
+    if Path(output_file_path).exists():
         print(f"Output file '{output_file_path}' already exists. Aborting.")
         return
 
     try:
         # Open the input file in binary mode
-        audio_file = open(input_file_path, "rb")
+        with open(input_file_path, "rb") as audio_file:
+            # Transcribe the audio using the OpenAI API
+            client = openai.OpenAI()
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="text",
+                language=language
+            )
     except FileNotFoundError:
         # Print error message and return if input file does not exist
         print(f"Input file '{input_file_path}' not found. Aborting.")
         return
-
-    try:
-        # Transcribe the audio using the OpenAI API
-        transcript = openai.Audio.transcribe(
-            file=audio_file,
-            model="whisper-1",
-            response_format="text",
-            language=language
-        )
     except Exception as e:
         # Print error message and return if API call fails
         print(f"Error during API call: {e}")
@@ -77,27 +79,25 @@ def process_directory(directory_path, recursive, language):
     Args:
         directory_path (str): The path to the directory containing audio files.
         recursive (bool): Whether to process files in subdirectories.
+        language (str): The language code for transcription.
 
     Returns:
         None.
     """
-    if not os.path.isdir(directory_path):
+    directory = Path(directory_path)
+    if not directory.is_dir():
         logging.error(f"Directory '{directory_path}' does not exist or is not a directory. Please provide a valid directory.")
         return
 
     if recursive:
-        for root, dirs, files in os.walk(directory_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                if is_supported_format(file_path):
-                    logging.info(f"Processing file: {file_path}, {language}")
-                    create_transcript_file(file_path, language)
+        files = directory.rglob('*')
     else:
-        for file in os.listdir(directory_path):
-            file_path = os.path.join(directory_path, file)
-            if os.path.isfile(file_path) and is_supported_format(file_path):
-                logging.info(f"Processing file: {file_path}")
-                create_transcript_file(file_path)
+        files = directory.glob('*')
+
+    for file in files:
+        if file.is_file() and is_supported_format(file):
+            logging.info(f"Processing file: {file}")
+            create_transcript_file(str(file), language)
 
 def parse_args():
     """Parse command line arguments."""
@@ -144,5 +144,6 @@ def main():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    openai.api_key_path = '/Users/marekkowalczyk/repos/audio-transcribe/config/whisper_02.txt'
+    # openai.api_key_path = '/Users/marekkowalczyk/repos/audio-transcribe/config/whisper_02.txt'
+    # The API key resides in ~/.env
     main()
